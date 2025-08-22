@@ -110,7 +110,12 @@ function copyRequest(index) {
     if (index >= capturedRequests.length) return;
     
     const request = capturedRequests[index];
-    const jsonString = JSON.stringify(request, null, 2);
+    
+    // Create a clean copy without internal IDs
+    const cleanRequest = { ...request };
+    delete cleanRequest.id;
+    
+    const jsonString = JSON.stringify(cleanRequest, null, 2);
     
     // Use the clipboard API to copy
     navigator.clipboard.writeText(jsonString).then(() => {

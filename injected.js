@@ -116,10 +116,35 @@
   };
 
   /**
+   * Parse and beautify JSON strings
+   * @param {string} str
+   */
+  const beautifyJson = (str) => {
+    if (!str || typeof str !== 'string') return str;
+    try {
+      const parsed = JSON.parse(str);
+      return parsed; // Return the actual object, not stringified
+    } catch {
+      return str; // Return original if not valid JSON
+    }
+  };
+
+  /**
    * Post a captured entry to the content script.
    * @param {Object} entry
    */
   const post = (entry) => {
+    // Generate a unique ID for this request
+    entry.id = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    
+    // Beautify JSON bodies
+    if (entry.request?.body) {
+      entry.request.body = beautifyJson(entry.request.body);
+    }
+    if (entry.response?.body) {
+      entry.response.body = beautifyJson(entry.response.body);
+    }
+    
     window.postMessage({ __netCapture__: true, entry }, "*");
   };
 

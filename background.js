@@ -5,21 +5,95 @@
 // most recently captured network request/response to the clipboard.
 
 chrome.runtime.onInstalled.addListener(() => {
-  // Create a single context menu item available on all pages.
+  // Create the main context menu item
   chrome.contextMenus.create({
     id: "copy-detailed-req-res",
     title: "Copy detailed req/res",
     contexts: ["all"]
   });
+  
+  // Create a parent menu for recent requests
+  chrome.contextMenus.create({
+    id: "copy-recent-requests",
+    title: "Copy recent requests",
+    contexts: ["all"]
+  });
+  
+  // Create a submenu item for the last request
+  chrome.contextMenus.create({
+    id: "copy-last-request",
+    parentId: "copy-recent-requests",
+    title: "📤 Last request",
+    contexts: ["all"]
+  });
 });
 
+// Function to update the recent requests submenu
+async function updateRecentRequestsMenu(tabId) {
+  try {
+    // Remove all dynamic menu items first
+    const existingItems = await chrome.contextMenus.removeAll();
+    
+    // Recreate the base menu items
+    chrome.contextMenus.create({
+      id: "copy-detailed-req-res",
+      title: "Copy detailed req/res (last)",
+      contexts: ["all"]
+    });
+    
+    chrome.contextMenus.create({
+      id: "copy-recent-requests",
+      title: "Copy recent requests",
+      contexts: ["all"]
+    });
+    
+    // Get recent entries from content script
+    const response = await chrome.tabs.sendMessage(tabId, { type: "GET_RECENT_ENTRIES" });
+    
+    if (response?.ok && response.entries?.length > 0) {
+      response.entries.forEach((entry, index) => {
+        const url = entry.url.length > 50 ? entry.url.substring(0, 50) + "..." : entry.url;
+        const title = `${entry.method} ${url} (${entry.status})`;
+        
+        chrome.contextMenus.create({
+          id: `copy-entry-${entry.id}`,
+          parentId: "copy-recent-requests",
+          title: title,
+          contexts: ["all"]
+        });
+      });
+    } else {
+      chrome.contextMenus.create({
+        id: "no-requests",
+        parentId: "copy-recent-requests",
+        title: "No requests captured yet",
+        contexts: ["all"],
+        enabled: false
+      });
+    }
+  } catch (err) {
+    console.warn("Could not update recent requests menu:", err);
+  }
+}
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  // Ignore clicks on other menu items or if there is no tab ID.
-  if (info.menuItemId !== "copy-detailed-req-res" || !tab?.id) return;
+  if (!tab?.id) return;
 
   try {
-    // Ask the content script to copy the last captured entry.
-    await chrome.tabs.sendMessage(tab.id, { type: "COPY_LAST_ENTRY" });
+    let messageType;
+    let messageData = {};
+    
+    if (info.menuItemId === "copy-detailed-req-res") {
+      messageType = "COPY_LAST_ENTRY";
+    } else if (info.menuItemId.startsWith("copy-entry-")) {
+      messageType = "COPY_ENTRY_BY_ID";
+      messageData.entryId = info.menuItemId.replace("copy-entry-", "");
+    } else {
+      return; // Unknown menu item
+    }
+
+    // Try to send message to content script
+    await chrome.tabs.sendMessage(tab.id, { type: messageType, ...messageData });
   } catch (e) {
     // If the content script hasn't yet injected, try injecting it on demand.
     try {
@@ -28,10 +102,27 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         files: ["content.js"]
       });
       // After injection, try again.
-      await chrome.tabs.sendMessage(tab.id, { type: "COPY_LAST_ENTRY" });
+      let messageType = info.menuItemId === "copy-detailed-req-res" ? "COPY_LAST_ENTRY" : "COPY_ENTRY_BY_ID";
+      let messageData = {};
+      if (info.menuItemId.startsWith("copy-entry-")) {
+        messageData.entryId = info.menuItemId.replace("copy-entry-", "");
+      }
+      await chrome.tabs.sendMessage(tab.id, { type: messageType, ...messageData });
     } catch (err) {
-      console.warn("Could not copy last entry:", err);
+      console.warn("Could not copy entry:", err);
     }
+  }
+});
+
+// Update context menu when tab becomes active
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  await updateRecentRequestsMenu(activeInfo.tabId);
+});
+
+// Update context menu when tab is updated (page reload, navigation)
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete') {
+    await updateRecentRequestsMenu(tabId);
   }
 });
 
