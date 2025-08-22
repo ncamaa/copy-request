@@ -32,7 +32,7 @@ chrome.runtime.onInstalled.addListener(() => {
 async function updateRecentRequestsMenu(tabId) {
   try {
     // Remove all dynamic menu items first
-    const existingItems = await chrome.contextMenus.removeAll();
+    await chrome.contextMenus.removeAll();
     
     // Recreate the base menu items
     chrome.contextMenus.create({
@@ -47,8 +47,13 @@ async function updateRecentRequestsMenu(tabId) {
       contexts: ["all"]
     });
     
-    // Get recent entries from content script
-    const response = await chrome.tabs.sendMessage(tabId, { type: "GET_RECENT_ENTRIES" });
+    // Try to get recent entries from content script
+    let response = null;
+    try {
+      response = await chrome.tabs.sendMessage(tabId, { type: "GET_RECENT_ENTRIES" });
+    } catch (err) {
+      console.log("Content script not ready yet, will show default menu");
+    }
     
     if (response?.ok && response.entries?.length > 0) {
       response.entries.forEach((entry, index) => {
@@ -127,11 +132,18 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 });
 
 // Handle messages from content scripts (for DevTools panel communication)
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   if (message.type === "NETWORK_REQUEST_CAPTURED") {
     // Forward to DevTools panel if it exists
     // Note: DevTools panels receive these messages automatically via chrome.runtime.onMessage
     // This is mainly for logging and potential future features
     console.log("Network request captured:", message.data?.request?.url);
+    
+    // Update context menu when a new request is captured (with small delay)
+    if (sender.tab?.id) {
+      setTimeout(async () => {
+        await updateRecentRequestsMenu(sender.tab.id);
+      }, 100); // Small delay to ensure content script has processed the request
+    }
   }
 });

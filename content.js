@@ -37,12 +37,13 @@ window.addEventListener(
       allEntries = allEntries.slice(0, MAX_STORED_REQUESTS);
     }
     
-    // Also send to DevTools panel if it's open
+    // Also send to DevTools panel and background script
     chrome.runtime.sendMessage({
       type: "NETWORK_REQUEST_CAPTURED",
       data: data.entry
-    }).catch(() => {
+    }).catch((err) => {
       // DevTools panel might not be open, ignore errors
+      console.log("Could not send message to background:", err);
     });
   },
   false
@@ -92,7 +93,7 @@ chrome.runtime.onMessage.addListener((_msg, _sender, sendResponse) => {
       const recentEntries = allEntries.slice(0, 10).map(entry => ({
         id: entry.id,
         method: entry.request?.method || 'GET',
-        url: entry.request?.url || entry.request?.path || 'Unknown',
+        url: entry.request?.path || entry.request?.url || 'Unknown',
         status: entry.response?.status || 'Unknown',
         timestamp: entry.capturedAt || new Date().toISOString()
       }));
