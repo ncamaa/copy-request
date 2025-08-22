@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Copy Detailed Req/Res",
+  "version": "0.1.0",
+  "description": "Right‑click to copy the last network request/response details.",
+  "icons": {
+    "16": "icon16.png",
+    "32": "icon32.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "permissions": [
+    "contextMenus",
+    "scripting",
+    "activeTab",
+    "storage",
+    "clipboardWrite"
+  ],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["injected.js"],
+      "matches": ["http://*/*", "https://*/*"]
+    }
+  ],
+  "devtools_page": "devtools.html"
+}
